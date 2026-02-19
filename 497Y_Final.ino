@@ -50,6 +50,8 @@ struct Timer
   bool active = false;
   bool done = false;
 
+  bool input_received = false;
+
   unsigned long time_remaining = 0;
   unsigned long last_tick = 0;
 
@@ -69,9 +71,10 @@ struct Timer
   /*
       This function essentially stores the time remaining for the timer in seconds
   */
-  void set(unsigned long start_val_hrs)
+  void set(unsigned int start_val_hrs)
   {
-    time_remaining = start_val_hrs * 60UL * 60UL;
+    unsigned long start_val_hrsUL = static_cast<unsigned long>(start_val_hrs);
+    time_remaining = start_val_hrsUL * 60UL * 60UL;
   }
 
   /*
@@ -97,6 +100,98 @@ struct Timer
   {
     if (time_remaining < 3600) return 0;
     return (time_remaining / 60UL) / 60UL;
+  }
+
+  void buzz_mode()
+  {
+    if (input_received) {
+      digitalWrite(BUZZER, LOW);
+      timer.active = false;
+      return;
+    }
+
+    digitalWrite(BUZZER, HIGH);
+  }
+
+  /* This implementation makes the lights blink without blocking user input */
+  void light_mode(unsigned long call_time_millis)
+  {
+    unsigned long time = call_time_millis;
+    while (millis - time <= 250) {
+      if (input_received) {
+        digitalWrite(LED0, LOW);
+        digitalWrite(LED1, LOW);
+        digitalWrite(LED2, LOW);
+        digitalWrite(LED3, LOW);
+        digitalWrite(LED4, LOW);
+
+        timer.active = false;
+        return;
+      }
+
+      digitalWrite(LED0, HIGH);
+      digitalWrite(LED1, HIGH);
+      digitalWrite(LED2, HIGH);
+      digitalWrite(LED3, HIGH);
+      digitalWrite(LED4, HIGH);
+    }
+
+    time = millis();
+    while (millis - time <= 250) {
+      digitalWrite(LED0, LOW);
+      digitalWrite(LED1, LOW);
+      digitalWrite(LED2, LOW);
+      digitalWrite(LED3, LOW);
+      digitalWrite(LED4, LOW);
+
+      if (input_received) {
+        timer.active = false;
+        return;
+      }
+    }
+  }
+
+  void all_mode()
+  {
+    buzz_mode();
+    light_mode();
+  }
+
+  void variable_mode()
+  {
+    if (analogRead(LIGHT_SENSOR) < 20) {
+      light_mode(millis());
+    }
+    else {
+      buzz_mode();
+    }
+  }
+
+  void alert()
+  {
+    if (cur_mode == AlertMode::BUZZ) {
+      buzz_mode();
+    }
+    else if (cur_mode == AlertMode::LIGHT) {
+      light_mode(millis());
+    }
+    else if (cur_mode == AlertMode::ALL) {
+      buzz_mode();
+      light_mode(millis());
+    }
+    else {
+      variable_mode();
+    }
+  }
+
+  void reset()
+  {
+    cur_mode = AlertMode::ALL;
+    active = false;
+    done = false;
+    input_received = false;
+    time_remaining = 0;
+    last_tick = 0;
   }
 };
 
@@ -159,7 +254,7 @@ LEDs leds;
 void loop()
 {
   if (timer.active && timer.decrement() == true) {
-    // TODO - alert based on the selected mode
+    timer.alert();
   }
 
   leds.write_value(timer.to_hours());
@@ -169,15 +264,23 @@ void loop()
       starting value of 24 hours.
       Pressing the button for less than 1 second cycles through the alert modes.
   */
+  unsigned int val_hrs = 0;
   if ((digitalRead(BUTTON) == LOW) && button.was_pressed) {
     button.cur_press_duration = millis() - button.press_start;
 
-    // TODO - check cur press duration and light up LEDs accordingly to show
-    // the starting timer value
+    /*check current press duration and light up LEDs accordingly to show
+    the starting timer value */
+    if (button.cur_press_duration > 1000) {
+      val_hrs = button.cur_press_duration / 1000;
+      if (val_hrs > 24) val_hrs = 24;
+
+      leds.write_value(val_hrs);
+    }
   }
   else if ((digitalRead(BUTTON) == LOW) && !button.was_pressed) {
     button.press_start = millis();
     button.was_pressed = true;
+    timer.input_received = true;
   }
   else if ((digitalRead(BUTTON) == HIGH) && button.was_pressed) {
     button.final_press_duration = millis() - button.press_start;
@@ -186,16 +289,18 @@ void loop()
     if (button.final_press_duration < 1000) {
       timer.cur_mode = timer.next_mode(timer.cur_mode);
     }
+    else if (button.final_press_duration > 1000) {
+      timer.active = true;
+      timer.done = false;
+      timer.set(val_hrs);
+    }
 
     button.reset();
+    timer.input_received = false;
   }
 
-  // the switch lets users cancel the current timer
+  /* the switch lets users cancel the current timer */
   if (digitalRead(SWITCH) == LOW) {
-    timer.active = false;
-
-    // TODO - add a reset function for the timer similar to what is in the button struct and
-    // call it here
+    timer.reset();
   }
-
 }
