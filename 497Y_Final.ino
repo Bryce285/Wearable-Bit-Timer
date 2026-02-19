@@ -62,7 +62,7 @@ struct Timer
       case AlertMode::BUZZ: return AlertMode::LIGHT;
       case AlertMode::LIGHT: return AlertMode::ALL;
       case AlertMode::ALL: return AlertMode::VARIABLE;
-      case AlertMode::VARIABLE return AlertMode::BUZZ;
+      case AlertMode::VARIABLE: return AlertMode::BUZZ;
     }
 
     return AlertMode::ALL;
