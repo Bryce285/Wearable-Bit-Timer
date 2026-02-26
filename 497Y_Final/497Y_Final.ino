@@ -106,7 +106,7 @@ struct Timer
   {
     if (input_received) {
       digitalWrite(BUZZER, LOW);
-      timer.active = false;
+      active = false;
       return;
     }
 
@@ -125,7 +125,7 @@ struct Timer
         digitalWrite(LED3, LOW);
         digitalWrite(LED4, LOW);
 
-        timer.active = false;
+        active = false;
         return;
       }
 
@@ -145,7 +145,7 @@ struct Timer
       digitalWrite(LED4, LOW);
 
       if (input_received) {
-        timer.active = false;
+        active = false;
         return;
       }
     }
@@ -154,7 +154,7 @@ struct Timer
   void all_mode()
   {
     buzz_mode();
-    light_mode();
+    light_mode(millis());
   }
 
   void variable_mode()
