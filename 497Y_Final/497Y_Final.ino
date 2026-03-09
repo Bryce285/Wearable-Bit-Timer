@@ -2,9 +2,9 @@
     TODO - DOUBLE CHECK THAT THESE PIN ASSIGNMENTS WORK WITH CIRCUIT LAYOUT BEFORE CONSTRUCTION
 */
 const int SWITCH = 10;
-const int BUTTON = A9;
-const int LIGHT_SENSOR = A8;
-const int BUZZER = A7;
+const int BUTTON = 11;
+const int LIGHT_SENSOR = A2;
+const int BUZZER = A3;
 
 /*
     LEDs are labeled according to the bit significance of their position
@@ -15,8 +15,8 @@ const int BUZZER = A7;
 const int LED0 = A4;
 const int LED1 = A5;
 const int LED2 = 6;
-const int LED3 = A3;
-const int LED4 = A2;
+const int LED3 = A7;
+const int LED4 = A8;
 
 void setup() 
 {
@@ -52,6 +52,7 @@ struct Timer
 
   bool input_received = false;
 
+  unsigned int selected_hrs = 0;
   unsigned long time_remaining = 0;
   unsigned long last_tick = 0;
 
@@ -63,18 +64,20 @@ struct Timer
       case AlertMode::LIGHT: return AlertMode::ALL;
       case AlertMode::ALL: return AlertMode::VARIABLE;
       case AlertMode::VARIABLE: return AlertMode::BUZZ;
+      default: return AlertMode::ALL;
     }
 
     return AlertMode::ALL;
   }
 
   /*
-      This function essentially stores the time remaining for the timer in seconds
+      This function converts hours to seconds for the timer
   */
   void set(unsigned int start_val_hrs)
   {
     unsigned long start_val_hrsUL = static_cast<unsigned long>(start_val_hrs);
     time_remaining = start_val_hrsUL * 60UL * 60UL;
+    last_tick = millis();
   }
 
   /*
@@ -85,7 +88,10 @@ struct Timer
   {
     if (millis() - last_tick >= 1000) {
       last_tick = millis();
-      time_remaining--;
+
+      if (time_remaining > 0) {
+        time_remaining--;
+      }
 
       if (time_remaining == 0) {
         done = true;
@@ -114,53 +120,43 @@ struct Timer
   }
 
   /* This implementation makes the lights blink without blocking user input */
-  void light_mode(unsigned long call_time_millis)
+  void light_mode()
   {
-    unsigned long time = call_time_millis;
-    while (millis - time <= 250) {
-      if (input_received) {
-        digitalWrite(LED0, LOW);
-        digitalWrite(LED1, LOW);
-        digitalWrite(LED2, LOW);
-        digitalWrite(LED3, LOW);
-        digitalWrite(LED4, LOW);
-
-        active = false;
-        return;
-      }
-
-      digitalWrite(LED0, HIGH);
-      digitalWrite(LED1, HIGH);
-      digitalWrite(LED2, HIGH);
-      digitalWrite(LED3, HIGH);
-      digitalWrite(LED4, HIGH);
-    }
-
-    time = millis();
-    while (millis - time <= 250) {
+    if (input_received) {
       digitalWrite(LED0, LOW);
       digitalWrite(LED1, LOW);
       digitalWrite(LED2, LOW);
       digitalWrite(LED3, LOW);
       digitalWrite(LED4, LOW);
+      active = false;
+      return;
+    }
 
-      if (input_received) {
-        active = false;
-        return;
-      }
+    static unsigned long last_blink = 0;
+    static bool state = false;
+
+    if (millis() - last_blink >= 250) {
+      last_blink = millis();
+      state = !state;
+
+      digitalWrite(LED0, state);
+      digitalWrite(LED1, state);
+      digitalWrite(LED2, state);
+      digitalWrite(LED3, state);
+      digitalWrite(LED4, state);
     }
   }
 
   void all_mode()
   {
     buzz_mode();
-    light_mode(millis());
+    light_mode();
   }
 
   void variable_mode()
   {
     if (analogRead(LIGHT_SENSOR) < 20) {
-      light_mode(millis());
+      light_mode();
     }
     else {
       buzz_mode();
@@ -173,11 +169,11 @@ struct Timer
       buzz_mode();
     }
     else if (cur_mode == AlertMode::LIGHT) {
-      light_mode(millis());
+      light_mode();
     }
     else if (cur_mode == AlertMode::ALL) {
       buzz_mode();
-      light_mode(millis());
+      light_mode();
     }
     else {
       variable_mode();
@@ -226,9 +222,9 @@ struct LEDs
 
     unsigned int ones_bit = value & 1U;
     unsigned int twos_bit = (value & (1U << 1)) >> 1;
-    unsigned int threes_bit = (value & (1U << 2)) >> 2;
-    unsigned int fours_bit = (value & (1U << 3)) >> 3;
-    unsigned int fives_bit = (value & (1U << 4)) >> 4;
+    unsigned int fours_bit = (value & (1U << 2)) >> 2;
+    unsigned int eights_bit = (value & (1U << 3)) >> 3;
+    unsigned int sixteens_bit = (value & (1U << 4)) >> 4;
 
     if (ones_bit == 1) digitalWrite(LED0, HIGH);
     else digitalWrite(LED0, LOW);
@@ -236,13 +232,13 @@ struct LEDs
     if (twos_bit == 1) digitalWrite(LED1, HIGH);
     else digitalWrite(LED1, LOW);
 
-    if (threes_bit == 1) digitalWrite(LED2, HIGH);
+    if (fours_bit == 1) digitalWrite(LED2, HIGH);
     else digitalWrite(LED2, LOW);
 
-    if (fours_bit == 1) digitalWrite(LED3, HIGH);
+    if (eights_bit == 1) digitalWrite(LED3, HIGH);
     else digitalWrite(LED3, LOW);
 
-    if (fives_bit == 1) digitalWrite(LED4, HIGH);
+    if (sixteens_bit == 1) digitalWrite(LED4, HIGH);
     else digitalWrite(LED4, LOW);
   }
 };
@@ -253,8 +249,14 @@ LEDs leds;
 
 void loop()
 {
-  if (timer.active && timer.decrement() == true) {
-    timer.alert();
+  if (timer.active) {
+    if (timer.decrement()) {
+      timer.done = true;
+    }
+
+    if (timer.done) {
+      timer.alert();
+    }
   }
 
   leds.write_value(timer.to_hours());
@@ -264,17 +266,16 @@ void loop()
       starting value of 24 hours.
       Pressing the button for less than 1 second cycles through the alert modes.
   */
-  unsigned int val_hrs = 0;
   if ((digitalRead(BUTTON) == LOW) && button.was_pressed) {
     button.cur_press_duration = millis() - button.press_start;
 
     /*check current press duration and light up LEDs accordingly to show
     the starting timer value */
     if (button.cur_press_duration > 1000) {
-      val_hrs = button.cur_press_duration / 1000;
-      if (val_hrs > 24) val_hrs = 24;
+      timer.selected_hrs = button.cur_press_duration / 1000;
+      if (timer.selected_hrs > 24) timer.selected_hrs = 24;
 
-      leds.write_value(val_hrs);
+      leds.write_value(timer.selected_hrs);
     }
   }
   else if ((digitalRead(BUTTON) == LOW) && !button.was_pressed) {
@@ -292,7 +293,7 @@ void loop()
     else if (button.final_press_duration > 1000) {
       timer.active = true;
       timer.done = false;
-      timer.set(val_hrs);
+      timer.set(timer.selected_hrs);
     }
 
     button.reset();
