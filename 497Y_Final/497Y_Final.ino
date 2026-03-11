@@ -9,7 +9,7 @@ const int BUZZER = A3;
 /*
     LEDs are labeled according to the bit significance of their position
     on the garment.
-    LED0 is in the place of the least significant bit while LED5
+    LED0 is in the place of the least significant bit while LED4
     is in the place of the most significant bit.
 */
 const int LED0 = A4;
@@ -20,11 +20,10 @@ const int LED4 = A8;
 
 void setup() 
 {
-  pinMode(SWITCH, INPUT);
-  digitalWrite(SWITCH, HIGH);
+  Serial.begin(9600);
 
-  pinMode(BUTTON, INPUT);
-  digitalWrite(BUTTON, HIGH);
+  pinMode(SWITCH, INPUT_PULLUP);
+  pinMode(BUTTON, INPUT_PULLUP);
 
   pinMode(LIGHT_SENSOR, INPUT);
   
@@ -44,7 +43,7 @@ enum class AlertMode
   VARIABLE      // alert based on current light level
 };
 
-struct Timer
+namespace Timer
 {
   AlertMode cur_mode = AlertMode::ALL;
   bool active = false;
@@ -52,7 +51,7 @@ struct Timer
 
   bool input_received = false;
 
-  unsigned int selected_hrs = 0;
+  unsigned int selected_mins = 0;
   unsigned long time_remaining = 0;
   unsigned long last_tick = 0;
 
@@ -71,12 +70,12 @@ struct Timer
   }
 
   /*
-      This function converts hours to seconds for the timer
+      This function converts minutes to seconds for the timer
   */
-  void set(unsigned int start_val_hrs)
+  void set(unsigned int start_val_mins)
   {
-    unsigned long start_val_hrsUL = static_cast<unsigned long>(start_val_hrs);
-    time_remaining = start_val_hrsUL * 60UL * 60UL;
+    unsigned long start_val_minsUL = static_cast<unsigned long>(start_val_mins);
+    time_remaining = start_val_minsUL * 60UL;
     last_tick = millis();
   }
 
@@ -102,10 +101,10 @@ struct Timer
     return false;
   }
 
-  unsigned long to_hours()
+  unsigned long to_mins()
   {
-    if (time_remaining < 3600) return 0;
-    return (time_remaining / 60UL) / 60UL;
+    if (time_remaining < 60) return 0;
+    return (time_remaining / 60UL);
   }
 
   void buzz_mode()
@@ -191,7 +190,7 @@ struct Timer
   }
 };
 
-struct Button
+namespace Button
 {
   unsigned long press_start = 0;
   unsigned long cur_press_duration = 0;
@@ -207,11 +206,11 @@ struct Button
   }
 };
 
-struct LEDs
+namespace LEDs
 {
   void write_value(unsigned int value)
   {
-    if (value > 24) {
+    if (value > 31) {
       digitalWrite(LED0, LOW);
       digitalWrite(LED1, LOW);
       digitalWrite(LED2, LOW);
@@ -243,65 +242,64 @@ struct LEDs
   }
 };
 
-Timer timer;
-Button button;
-LEDs leds;
-
 void loop()
 {
-  if (timer.active) {
-    if (timer.decrement()) {
-      timer.done = true;
+  if (Timer::active) {
+    if (Timer::decrement()) {
+      Timer::done = true;
     }
 
-    if (timer.done) {
-      timer.alert();
+    if (Timer::done) {
+      Timer::alert();
     }
   }
 
-  leds.write_value(timer.to_hours());
+  LEDs::write_value(Timer::to_mins());
 
   /*
       Holding the button down increments the starting timer value each second up to a
-      starting value of 24 hours.
+      starting value of 31 minutes.
       Pressing the button for less than 1 second cycles through the alert modes.
   */
-  if ((digitalRead(BUTTON) == LOW) && button.was_pressed) {
-    button.cur_press_duration = millis() - button.press_start;
+  if ((digitalRead(BUTTON) == LOW) && Button::was_pressed) {
+    Serial.println("Button pressed");
+    Button::cur_press_duration = millis() - Button::press_start;
 
     /*check current press duration and light up LEDs accordingly to show
     the starting timer value */
-    if (button.cur_press_duration > 1000) {
-      timer.selected_hrs = button.cur_press_duration / 1000;
-      if (timer.selected_hrs > 24) timer.selected_hrs = 24;
+    if (Button::cur_press_duration > 1000) {
+      Timer::selected_mins = Button::cur_press_duration / 1000;
+      if (Timer::selected_mins > 31) Timer::selected_mins = 31;
 
-      leds.write_value(timer.selected_hrs);
+      LEDs::write_value(Timer::selected_mins);
     }
   }
-  else if ((digitalRead(BUTTON) == LOW) && !button.was_pressed) {
-    button.press_start = millis();
-    button.was_pressed = true;
-    timer.input_received = true;
+  else if ((digitalRead(BUTTON) == LOW) && !Button::was_pressed) {
+    Serial.println("Button pressed");
+    Button::press_start = millis();
+    Button::was_pressed = true;
+    Timer::input_received = true;
   }
-  else if ((digitalRead(BUTTON) == HIGH) && button.was_pressed) {
-    button.final_press_duration = millis() - button.press_start;
-    button.was_pressed = false;
+  else if ((digitalRead(BUTTON) == HIGH) && Button::was_pressed) {
+    Button::final_press_duration = millis() - Button::press_start;
+    Button::was_pressed = false;
 
-    if (button.final_press_duration < 1000) {
-      timer.cur_mode = timer.next_mode(timer.cur_mode);
+    if (Button::final_press_duration < 1000) {
+      Timer::cur_mode = Timer::next_mode(Timer::cur_mode);
     }
-    else if (button.final_press_duration > 1000) {
-      timer.active = true;
-      timer.done = false;
-      timer.set(timer.selected_hrs);
+    else if (Button::final_press_duration > 1000) {
+      Timer::active = true;
+      Timer::done = false;
+      Timer::set(Timer::selected_mins);
     }
 
-    button.reset();
-    timer.input_received = false;
+    Button::reset();
+    Timer::input_received = false;
   }
 
   /* the switch lets users cancel the current timer */
   if (digitalRead(SWITCH) == LOW) {
-    timer.reset();
+    Serial.println("Switch flipped");
+    Timer::reset();
   }
 }
