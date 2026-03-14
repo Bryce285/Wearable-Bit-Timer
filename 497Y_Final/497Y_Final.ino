@@ -386,9 +386,7 @@ void loop()
 
   /* 
       Detect a change in the buttons state and when that state change occured.
-      We need to track this information for two reasons: one is that we care
-      about whether the button was pressed or held down, and two is that we want 
-      to apply debouncing to the button.
+      This information is used as part of the debouncing process.
   */
   if (Button::raw_button != Button::last_state) {
     Button::last_change_time = Button::now;
