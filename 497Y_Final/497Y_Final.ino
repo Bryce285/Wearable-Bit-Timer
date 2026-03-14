@@ -374,7 +374,7 @@ void loop()
     }
   }
 
-  //Timer::input_received = false;
+  Timer::input_received = false;
 
   /* As long as the timer is not done, we write its value in minutes to the LEDs */
   if (!Timer::done) {
