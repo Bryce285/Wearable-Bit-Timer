@@ -80,7 +80,7 @@ namespace LEDs
     unsigned int eights_bit = (value & (1U << 3)) >> 3;
     unsigned int sixteens_bit = (value & (1U << 4)) >> 4;
 
-    /* Check each bit and turn it on if it is set */
+    /* Check each bit and turn the led on if it is set */
     if (ones_bit == 1) digitalWrite(LED0, HIGH);
     else digitalWrite(LED0, LOW);
 
